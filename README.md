@@ -1,10 +1,21 @@
-# TCP Ingestor
+# TCP Ingestor <img src="https://raw.githubusercontent.com/TheZoq2/ferris/master/rustacean-flat-happy.svg" height="40"/>
 
-Serviço assíncrono em Rust que recebe streams TCP, persiste o tráfego bruto no MongoDB e publica métricas para Prometheus. A stack local já inclui um dashboard Grafana provisionado para acompanhar picos de ingestão.
+**Serviço assíncrono em Rust que recebe streams TCP, persiste o tráfego bruto no MongoDB e publica métricas para Prometheus.** A stack local já inclui um dashboard Grafana provisionado para acompanhar picos de ingestão.
+
+---
+
+### Tech Stack
+
+**Language**
+<p>
+  <img src="https://skillicons.dev/icons?i=rust,mongodb,prometheus,grafana,docker" height="36"/>
+</p>
+
+---
 
 ## Arquitetura
 
-```text
+```
 clientes TCP ──> listener Rust ──> fila limitada ──> writer em lote ──> MongoDB
                        │                                  │
                        └──────── métricas ────────────────┴──> Prometheus ──> Grafana
@@ -25,7 +36,7 @@ Cada documento em `tcp_ingestor.traffic` contém:
 
 Requer Docker com Compose:
 
-```bash
+```
 docker compose up --build -d
 docker compose ps
 ```
@@ -45,13 +56,13 @@ O dashboard **TCP Ingestor** aparece automaticamente na pasta de mesmo nome.
 
 Envie 50 MiB aleatórios:
 
-```bash
+```
 head -c 50M /dev/urandom | nc localhost 7000
 ```
 
 Confira a persistência e as métricas:
 
-```bash
+```
 docker compose exec mongodb mongosh tcp_ingestor --quiet --eval 'db.traffic.countDocuments()'
 curl http://localhost:9898/metrics
 ```
@@ -60,24 +71,24 @@ curl http://localhost:9898/metrics
 
 Com um MongoDB acessível em `localhost:27017`:
 
-```bash
+```
 cargo run
 ```
 
 Copie `.env.example` como referência para as configurações. O processo lê variáveis de ambiente diretamente; ele não carrega `.env` sozinho.
 
-| Variável | Padrão | Descrição |
-| --- | --- | --- |
-| `TCP_ADDR` | `0.0.0.0:7000` | endereço do listener TCP |
-| `METRICS_ADDR` | `0.0.0.0:9898` | endereço HTTP de métricas e health |
-| `MONGODB_URI` | `mongodb://localhost:27017` | URI do MongoDB |
-| `MONGODB_DATABASE` | `tcp_ingestor` | database de destino |
-| `MONGODB_COLLECTION` | `traffic` | collection de destino |
-| `QUEUE_CAPACITY` | `10000` | limite da fila com backpressure |
-| `BATCH_SIZE` | `500` | máximo de chunks por escrita |
-| `BATCH_FLUSH_MS` | `500` | tempo máximo até descarregar um lote |
-| `READ_BUFFER_BYTES` | `8192` | tamanho máximo de cada leitura/chunk |
-| `RUST_LOG` | `info` | filtro de logs do `tracing` |
+| Variável             | Padrão                       | Descrição                            |
+| --------------------- | ---------------------------- | ------------------------------------ |
+| `TCP_ADDR`            | `0.0.0.0:7000`                | endereço do listener TCP             |
+| `METRICS_ADDR`        | `0.0.0.0:9898`                | endereço HTTP de métricas e health   |
+| `MONGODB_URI`         | `mongodb://localhost:27017`   | URI do MongoDB                       |
+| `MONGODB_DATABASE`    | `tcp_ingestor`                | database de destino                  |
+| `MONGODB_COLLECTION`  | `traffic`                     | collection de destino                |
+| `QUEUE_CAPACITY`      | `10000`                       | limite da fila com backpressure      |
+| `BATCH_SIZE`          | `500`                         | máximo de chunks por escrita         |
+| `BATCH_FLUSH_MS`      | `500`                         | tempo máximo até descarregar um lote |
+| `READ_BUFFER_BYTES`   | `8192`                        | tamanho máximo de cada leitura/chunk |
+| `RUST_LOG`            | `info`                        | filtro de logs do `tracing`          |
 
 ## Métricas principais
 
@@ -97,8 +108,12 @@ A fila aplica backpressure quando o MongoDB não acompanha a entrada, e o deslig
 
 ## Qualidade
 
-```bash
+```
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
+
+---
+
+<p align="center">Feito com 🦀 e café por <a href="https://github.com/samuka7abr">@samuka7abr</a></p>
