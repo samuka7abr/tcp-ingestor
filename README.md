@@ -1,6 +1,6 @@
 # TCP Ingestor <img src="https://raw.githubusercontent.com/TheZoq2/ferris/master/rustacean-flat-happy.svg" height="40"/>
 
-**Serviço assíncrono em Rust que recebe streams TCP, persiste o tráfego bruto no MongoDB e publica métricas para Prometheus.** A stack local já inclui um dashboard Grafana provisionado para acompanhar picos de ingestão.
+**Async Rust service that receives TCP streams, persists raw traffic to MongoDB, and publishes metrics to Prometheus.** The local stack already includes a provisioned Grafana dashboard to track ingestion spikes.
 
 ---
 
@@ -13,100 +13,100 @@
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
-clientes TCP ──> listener Rust ──> fila limitada ──> writer em lote ──> MongoDB
+TCP clients ──> Rust listener ──> bounded queue ──> batch writer ──> MongoDB
                        │                                  │
-                       └──────── métricas ────────────────┴──> Prometheus ──> Grafana
+                       └──────── metrics ─────────────────┴──> Prometheus ──> Grafana
 ```
 
-O TCP é um stream e não possui fronteiras de mensagem. Por isso, cada leitura de até `READ_BUFFER_BYTES` bytes é armazenada como um `chunk`; aplicações que precisem reconstruir um protocolo devem usar `connection_id` e `chunk_index`.
+TCP is a stream and has no message boundaries. Because of that, each read of up to `READ_BUFFER_BYTES` bytes is stored as a `chunk`; applications that need to reconstruct a protocol should use `connection_id` and `chunk_index`.
 
-Cada documento em `tcp_ingestor.traffic` contém:
+Each document in `tcp_ingestor.traffic` contains:
 
-- `connection_id`: identificador local da conexão;
-- `chunk_index`: posição do chunk dentro da conexão, começando em zero;
-- `remote_addr`: IP e porta do cliente;
-- `received_at`: instante da leitura;
-- `size_bytes`: tamanho do chunk;
-- `payload`: bytes brutos em BSON Binary.
+- `connection_id`: local connection identifier;
+- `chunk_index`: chunk position within the connection, starting at zero;
+- `remote_addr`: client IP and port;
+- `received_at`: timestamp of the read;
+- `size_bytes`: chunk size;
+- `payload`: raw bytes as BSON Binary.
 
-## Subir tudo
+## Bring everything up
 
-Requer Docker com Compose:
+Requires Docker with Compose:
 
 ```
 docker compose up --build -d
 docker compose ps
 ```
 
-Serviços disponíveis:
+Available services:
 
 - TCP: `localhost:7000`
-- métricas/health: `http://localhost:9898/metrics` e `/health`
+- metrics/health: `http://localhost:9898/metrics` and `/health`
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000` (`admin` / `admin`)
 
-O dashboard **TCP Ingestor** aparece automaticamente na pasta de mesmo nome.
+The **TCP Ingestor** dashboard appears automatically in the folder of the same name.
 
-> **Hosts com kernel Linux 6.19 a 7.0.13:** o MongoDB detecta uma incompatibilidade do TCMalloc e interrompe a inicialização. A solução suportada é usar kernel 7.0.14+ ou um kernel anterior à faixa afetada; consulte as [notas oficiais de produção](https://www.mongodb.com/docs/manual/administration/production-notes/). A variável de Compose `MONGODB_IMAGE` permite testar outro tag, mas não corrige a incompatibilidade do host.
+> **Hosts running Linux kernel 6.19 to 7.0.13:** MongoDB detects a TCMalloc incompatibility and aborts startup. The supported fix is to use kernel 7.0.14+ or a kernel prior to the affected range; see the [official production notes](https://www.mongodb.com/docs/manual/administration/production-notes/). The Compose variable `MONGODB_IMAGE` lets you test another tag, but it does not fix the host incompatibility.
 
-## Gerar tráfego de teste
+## Generate test traffic
 
-Envie 50 MiB aleatórios:
+Send 50 MiB of random data:
 
 ```
 head -c 50M /dev/urandom | nc localhost 7000
 ```
 
-Confira a persistência e as métricas:
+Check persistence and metrics:
 
 ```
 docker compose exec mongodb mongosh tcp_ingestor --quiet --eval 'db.traffic.countDocuments()'
 curl http://localhost:9898/metrics
 ```
 
-## Rodar o binário localmente
+## Run the binary locally
 
-Com um MongoDB acessível em `localhost:27017`:
+With a MongoDB instance reachable at `localhost:27017`:
 
 ```
 cargo run
 ```
 
-Copie `.env.example` como referência para as configurações. O processo lê variáveis de ambiente diretamente; ele não carrega `.env` sozinho.
+Copy `.env.example` as a reference for the settings. The process reads environment variables directly; it does not load `.env` on its own.
 
-| Variável             | Padrão                       | Descrição                            |
+| Variable             | Default                       | Description                            |
 | --------------------- | ---------------------------- | ------------------------------------ |
-| `TCP_ADDR`            | `0.0.0.0:7000`                | endereço do listener TCP             |
-| `METRICS_ADDR`        | `0.0.0.0:9898`                | endereço HTTP de métricas e health   |
-| `MONGODB_URI`         | `mongodb://localhost:27017`   | URI do MongoDB                       |
-| `MONGODB_DATABASE`    | `tcp_ingestor`                | database de destino                  |
-| `MONGODB_COLLECTION`  | `traffic`                     | collection de destino                |
-| `QUEUE_CAPACITY`      | `10000`                       | limite da fila com backpressure      |
-| `BATCH_SIZE`          | `500`                         | máximo de chunks por escrita         |
-| `BATCH_FLUSH_MS`      | `500`                         | tempo máximo até descarregar um lote |
-| `READ_BUFFER_BYTES`   | `8192`                        | tamanho máximo de cada leitura/chunk |
-| `RUST_LOG`            | `info`                        | filtro de logs do `tracing`          |
+| `TCP_ADDR`            | `0.0.0.0:7000`                | TCP listener address             |
+| `METRICS_ADDR`        | `0.0.0.0:9898`                | HTTP address for metrics and health   |
+| `MONGODB_URI`         | `mongodb://localhost:27017`   | MongoDB URI                       |
+| `MONGODB_DATABASE`    | `tcp_ingestor`                | target database                       |
+| `MONGODB_COLLECTION`  | `traffic`                     | target collection                       |
+| `QUEUE_CAPACITY`      | `10000`                       | queue limit with backpressure      |
+| `BATCH_SIZE`          | `500`                         | maximum chunks per write         |
+| `BATCH_FLUSH_MS`      | `500`                         | maximum time before flushing a batch |
+| `READ_BUFFER_BYTES`   | `8192`                        | maximum size of each read/chunk |
+| `RUST_LOG`            | `info`                        | `tracing` log filter          |
 
-## Métricas principais
+## Key metrics
 
-- `tcp_ingestor_bytes_received_total`: bytes lidos da rede;
-- `tcp_ingestor_bytes_persisted_total`: bytes confirmados pelo MongoDB;
-- `tcp_ingestor_connections_active`: conexões atuais;
-- `tcp_ingestor_queue_depth`: pressão na fila;
-- `tcp_ingestor_mongo_write_duration_seconds`: latência dos lotes;
-- `tcp_ingestor_chunks_failed_total`: chunks descartados por falha de escrita;
-- `tcp_ingestor_mongo_up`: resultado da operação MongoDB mais recente.
+- `tcp_ingestor_bytes_received_total`: bytes read from the network;
+- `tcp_ingestor_bytes_persisted_total`: bytes confirmed by MongoDB;
+- `tcp_ingestor_connections_active`: current connections;
+- `tcp_ingestor_queue_depth`: queue pressure;
+- `tcp_ingestor_mongo_write_duration_seconds`: batch latency;
+- `tcp_ingestor_chunks_failed_total`: chunks dropped due to write failure;
+- `tcp_ingestor_mongo_up`: result of the most recent MongoDB operation.
 
-O dashboard calcula throughput com `rate(...bytes_received_total) * 8`, exibindo bits por segundo e permitindo enxergar os picos em uma janela de scrape de 2 segundos.
+The dashboard computes throughput with `rate(...bytes_received_total) * 8`, showing bits per second and making spikes visible within a 2-second scrape window.
 
-## Garantias deste primeiro corte
+## Guarantees of this first cut
 
-A fila aplica backpressure quando o MongoDB não acompanha a entrada, e o desligamento via `Ctrl+C` drena os dados já enfileirados. Uma falha de `insert_many` é contabilizada, mas o lote é descartado; confirmação ao cliente, retry persistente e dead-letter queue ficam fora deste init e são os próximos passos naturais caso a ingestão precise de garantia *at-least-once*.
+The queue applies backpressure when MongoDB can't keep up with the input, and shutdown via `Ctrl+C` drains the data already queued. An `insert_many` failure is counted, but the batch is dropped; client acknowledgment, persistent retry, and a dead-letter queue are out of scope for this initial cut and are the natural next steps if ingestion needs an *at-least-once* guarantee.
 
-## Qualidade
+## Quality
 
 ```
 cargo fmt --check
@@ -116,4 +116,4 @@ cargo test
 
 ---
 
-<p align="center">Feito com 🦀 e café por <a href="https://github.com/samuka7abr">@samuka7abr</a></p>
+<p align="center">Made with 🦀 and coffee by <a href="https://github.com/samuka7abr">@samuka7abr</a></p>
